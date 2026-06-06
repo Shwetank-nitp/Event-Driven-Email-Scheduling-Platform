@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+  QUEUED
+  RETRY
+}
+
+enum MessageType {
+  DRAFT
+  INBOX
+  SENT
+}
+
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  username  String    @unique
+  password  String
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  messages              Message[]
+  messageJobs           MessageJob[]
+  failedNotifications   FailedJobNotification[]
+
+  @@map("users")
+}
+
+model Message {
+  id        String      @id @default(uuid())
+  userId    String      @map("user_id")
+  fromUser  String      @map("from_user")
+  toUser    String      @map("to_user")
+  subject   String
+  body      String
+  type      MessageType
+  isRead    Boolean     @default(false) @map("is_read")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([userId, type])
+  @@map("messages")
+}
+
+model MessageJob {
+  id           String     @id @default(uuid())
+  userId       String     @map("user_id")
+  recipient    String
+  subject      String
+  body         String
+  scheduledAt  DateTime   @map("scheduled_at")
+  status       JobStatus  @default(PENDING)
+  retryCount   Int        @default(0) @map("retry_count")
+  errorMessage String?    @map("error_message")
+  sentAt       DateTime?  @map("sent_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@index([status, scheduledAt])
+  @@index([userId])
+  @@map("message_jobs")
+}
+
+model FailedJobNotification {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  jobId        String   @map("job_id")
+  recipient    String
+  subject      String
+  errorMessage String   @map("error_message")
+  retryCount   Int      @map("retry_count")
+  isRead       Boolean  @default(false) @map("is_read")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([userId, isRead])
+  @@map("failed_job_notifications")
+}

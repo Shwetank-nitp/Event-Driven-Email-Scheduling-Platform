@@ -1,0 +1,36 @@
+groups:
+  - name: worker-alerts
+    rules:
+      - alert: HighDLQRate
+        expr: rate(dlq_messages_total[5m]) * 60 > 5
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "DLQ growth rate is too high"
+          description: "DLQ is growing faster than 5 messages/min."
+
+      - alert: WorkerDown
+        expr: absent(worker_up) or sum(worker_up) < 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker is down"
+          description: "Worker process stopped reporting metrics."
+
+  - name: api-alerts
+    rules:
+      - alert: HighApiLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m]))
+            by (le)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API latency exceeded 500ms"
+          description: "95th percentile response time > 500ms."

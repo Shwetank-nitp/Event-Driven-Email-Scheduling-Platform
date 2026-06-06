@@ -1,0 +1,148 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: scheduler-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: scheduler-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: scheduler-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # api:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: scheduler-api
+  #   restart: unless-stopped
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   environment:
+  #     PORT: 3000
+  #     NODE_ENV: development
+  #     DATABASE_URL: postgresql://postgres:1234@postgres:5432/postgres
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: 6379
+  #     RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+  #     JWT_SECRET: your_secret_here
+  #     JWT_EXPIRES_IN: 7d
+  #     METRICS_PORT: 9090
+  #   ports:
+  #     - "3000:3000"
+  #     - "9090:9090"
+
+  # worker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: scheduler-worker
+  #   restart: unless-stopped
+  #   command: npm run worker
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     rabbitmq:
+  #       condition: service_healthy
+  #   environment:
+  #     NODE_ENV: development
+  #     DATABASE_URL: postgresql://postgres:1234@postgres:5432/postgres
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: 6379
+  #     RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+  #     JOB_MATRICES_SERVER_PORT: 9091
+  #   ports:
+  #     - "9091:9091"
+
+  prometheus:
+    image: prom/prometheus
+    container_name: scheduler-prometheus
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager
+    container_name: scheduler-alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    ports:
+      - "9093:9093"
+    environment:
+      HOST_NAME: ${HOST_NAME}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_AUTH_USERNAME: ${SMTP_AUTH_USERNAME}
+      SMTP_AUTH_PASSWORD: ${SMTP_AUTH_PASSWORD}
+      SEND_TO_USERNAME: ${SEND_TO_USERNAME}
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: scheduler-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  grafana_data:

@@ -1,0 +1,18 @@
+global:
+  smtp_smarthost: "${HOST_NAME}"
+  smtp_from: "${SMTP_FROM}"
+  smtp_auth_username: "${SMTP_AUTH_USERNAME}"
+  smtp_auth_password: "${SMTP_AUTH_PASSWORD}"
+  smtp_require_tls: true
+
+route:
+  receiver: admin-email
+  group_wait: 10s
+  group_interval: 30s
+  repeat_interval: 1h
+
+receivers:
+  - name: admin-email
+    email_configs:
+      - to: "${SEND_TO_USERNAME}"
+        send_resolved: true
