@@ -1,0 +1,566 @@
+openapi: 3.0.3
+info:
+  title: Message Scheduler API
+  version: 1.0.0
+  description: API for scheduling, managing, and retrieving messages and jobs.
+
+servers:
+  - url: /
+
+tags:
+  - name: Auth
+    description: Public authentication endpoints — no token required.
+  - name: Messages
+    description: Protected message and job endpoints — Bearer token required.
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    MessageType:
+      type: string
+      enum: [jobs, inbox, sent, draft]
+      default: jobs
+
+    StatsType:
+      type: string
+      enum: [job, message]
+      default: job
+
+    JobStatus:
+      type: string
+      enum: [PENDING, CANCELLED, SENT, FAILED]
+
+    CreateJobRequest:
+      type: object
+      required: [recipient, "@subject", body, scheduledAt]
+      properties:
+        recipient:
+          type: string
+          description: Must be a valid username.
+        subject:
+          type: string
+          minLength: 1
+          description: Subject of the message.
+        body:
+          type: string
+          minLength: 1
+          description: Body of the message.
+        scheduledAt:
+          type: string
+          format: date-time
+          description: ISO 8601 datetime; coerced to Date on the server.
+
+    JobObject:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        recipient:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        scheduledAt:
+          type: string
+          format: date-time
+        status:
+          $ref: "#/components/schemas/JobStatus"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    MessageObject:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        subject:
+          type: string
+        body:
+          type: string
+        type:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PaginatedResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: {}
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+        cached:
+          type: boolean
+
+    StatsResponse:
+      type: object
+      properties:
+        stats:
+          type: object
+          additionalProperties:
+            type: integer
+          description: >
+            For type=job: keys are JobStatus values (e.g. PENDING, SENT, FAILED, CANCELLED).
+            For type=message: keys are message type values (e.g. inbox, sent, draft).
+        cached:
+          type: boolean
+
+    RegisterRequest:
+      type: object
+      required: [name, username, password]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: Display name of the user.
+        username:
+          type: string
+          minLength: 3
+          pattern: "^[A-Za-z][A-Za-z0-9]*$"
+          description: >
+            Must start with a letter and contain only letters and numbers.
+            The server automatically prepends "@" before storing.
+        password:
+          type: string
+          minLength: 6
+          description: Plain-text password (hashed with bcrypt on the server).
+
+    LoginRequest:
+      type: object
+      required: [identifier, password]
+      properties:
+        identifier:
+          type: string
+          minLength: 1
+          description: Username (with "@" prefix) used to look up the account.
+        password:
+          type: string
+          minLength: 1
+          description: Plain-text password to verify against the stored bcrypt hash.
+
+    UserPublic:
+      type: object
+      description: Public-safe subset of user fields returned in auth responses.
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        username:
+          type: string
+          description: Stored with "@" prefix (e.g. "@johndoe").
+        createdAt:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Signed JWT. Subject claim is the user ID; expiry from JWT_EXPIRES_IN env (default 7d).
+        user:
+          $ref: "#/components/schemas/UserPublic"
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required: [message]
+
+  parameters:
+    PageParam:
+      in: query
+      name: page
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number (positive integer, default 1).
+
+    LimitParam:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 10
+      description: Items per page (1–100, default 10).
+
+    MessageTypeParam:
+      in: query
+      name: type
+      schema:
+        $ref: "#/components/schemas/MessageType"
+      description: Which message list to retrieve.
+
+    StatsTypeParam:
+      in: query
+      name: type
+      schema:
+        $ref: "#/components/schemas/StatsType"
+      description: Whether to retrieve job stats or message stats.
+
+  responses:
+    Conflict:
+      description: A conflicting resource already exists.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            message: Email or username already in use
+
+    Unauthorized:
+      description: Missing or invalid authentication token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            message: Unauthorized
+
+    ValidationError:
+      description: Request payload failed Zod validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            message: subject is required
+
+    NotFound:
+      description: The requested resource was not found, or does not belong to the authenticated user.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            message: Message not found
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              name: John Doe
+              username: johndoe
+              password: secret123
+      responses:
+        "201":
+          description: >
+            User created. Username is stored as "@johndoe" (server prepends "@").
+            Returns a signed JWT and the created user object.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+              example:
+                token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyXzEifQ.signature
+                user:
+                  id: user_1
+                  name: John Doe
+                  username: "@johndoe"
+                  createdAt: "2025-06-07T09:00:00.000Z"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with username and password
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              identifier: johndoe
+              password: secret123
+      responses:
+        "200":
+          description: >
+            Login successful. Returns a signed JWT and a public-safe user object
+            (id, name, username, createdAt — password is never returned).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+              example:
+                token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyXzEifQ.signature
+                user:
+                  id: user_1
+                  name: John Doe
+                  username: "@johndoe"
+                  createdAt: "2025-06-07T09:00:00.000Z"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          description: >
+            Invalid credentials. Returned both when the user is not found and when
+            the password does not match (intentionally indistinct to prevent enumeration).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                message: Invalid credentials
+  /api/m/schedule:
+    post:
+      tags: [Messages]
+      summary: Schedule a new message
+      operationId: createJob
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJobRequest"
+            example:
+              recipient: "@johndoe"
+              subject: Hello!
+              body: This is a scheduled message.
+              scheduledAt: "2025-12-01T09:00:00.000Z"
+      responses:
+        "201":
+          description: Job created successfully. Cache for the user's message lists and job stats is invalidated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobObject"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/m/messages:
+    get:
+      tags: [Messages]
+      summary: Get a paginated list of messages or jobs
+      operationId: listMessages
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/MessageTypeParam"
+        - $ref: "#/components/parameters/PageParam"
+        - $ref: "#/components/parameters/LimitParam"
+      responses:
+        "200":
+          description: >
+            Paginated list. `cached: true` means the response was served from Redis;
+            `cached: false` means it was freshly fetched and stored.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PaginatedResponse"
+                  - properties:
+                      data:
+                        type: array
+                        items:
+                          oneOf:
+                            - $ref: "#/components/schemas/JobObject"
+                            - $ref: "#/components/schemas/MessageObject"
+              examples:
+                jobs:
+                  summary: Jobs list (type=jobs)
+                  value:
+                    data:
+                      - id: "job_abc"
+                        userId: "user_1"
+                        recipient: "@johndoe"
+                        subject: Hello!
+                        body: Scheduled body
+                        scheduledAt: "2025-12-01T09:00:00.000Z"
+                        status: PENDING
+                    total: 42
+                    page: 1
+                    limit: 10
+                    cached: false
+                inbox:
+                  summary: Inbox list (type=inbox)
+                  value:
+                    data:
+                      - id: "msg_xyz"
+                        userId: "user_1"
+                        subject: Hello!
+                        body: Message body
+                        type: inbox
+                    total: 5
+                    page: 1
+                    limit: 10
+                    cached: true
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/m/messages/{id}:
+    get:
+      tags: [Messages]
+      summary: Get a single message or job by ID
+      operationId: getMessageById
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The ID of the job or message.
+        - $ref: "#/components/parameters/MessageTypeParam"
+      responses:
+        "200":
+          description: >
+            The requested message/job. Access is restricted to the authenticated user's
+            own records. `cached: true` if served from Redis.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - allOf:
+                      - $ref: "#/components/schemas/JobObject"
+                      - properties:
+                          cached:
+                            type: boolean
+                  - allOf:
+                      - $ref: "#/components/schemas/MessageObject"
+                      - properties:
+                          cached:
+                            type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/m/stats:
+    get:
+      tags: [Messages]
+      summary: Get aggregated stats for the authenticated user
+      operationId: getStats
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/StatsTypeParam"
+      responses:
+        "200":
+          description: >
+            Aggregated counts.
+            - `type=job`: keys are JobStatus enum values (PENDING, SENT, FAILED, CANCELLED).
+            - `type=message`: keys are message type values (inbox, sent, draft).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+              examples:
+                jobStats:
+                  summary: Job stats (type=job)
+                  value:
+                    stats:
+                      PENDING: 3
+                      SENT: 12
+                      FAILED: 1
+                      CANCELLED: 0
+                    cached: false
+                messageStats:
+                  summary: Message stats (type=message)
+                  value:
+                    stats:
+                      inbox: 7
+                      sent: 12
+                      draft: 2
+                    cached: true
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/m/jobs/{id}/cancel:
+    post:
+      tags: [Messages]
+      summary: Cancel a pending job
+      operationId: cancelJob
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: The ID of the job to cancel.
+      responses:
+        "200":
+          description: >
+            Job cancelled successfully. Cache for this job, the user's job stats,
+            and the user's message lists is invalidated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobObject"
+              example:
+                id: job_abc
+                userId: user_1
+                recipient: "@johndoe"
+                subject: Hello!
+                body: Scheduled body
+                scheduledAt: "2025-12-01T09:00:00.000Z"
+                status: CANCELLED
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: Job not found or does not belong to the authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                message: Job not found
+        "409":
+          description: Job cannot be cancelled because it is not in PENDING status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                message: Only pending jobs can be cancelled

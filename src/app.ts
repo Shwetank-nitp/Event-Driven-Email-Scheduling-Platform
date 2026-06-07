@@ -11,6 +11,12 @@ import { errorHandler } from "./middleware/errorHandler";
 import authRoutes from "./routes/auth";
 import messageRoutes from "./routes/messages";
 
+import fs from "fs";
+import path from "path";
+import yaml from "js-yaml";
+import swaggerUi from "swagger-ui-express";
+import { logger } from "./utils/logger";
+
 const app = express();
 
 app.use(helmet());
@@ -39,6 +45,16 @@ app.use((req, res, next) => {
   });
   next();
 });
+
+const specs = yaml.load(
+  fs.readFileSync(path.join(__dirname, "../openapi.yaml"), "utf-8")
+);
+
+if (specs) {
+  app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(specs));
+} else {
+  logger.warn("[Docs]: No api specs found at root folder");
+}
 
 app.use("/api/auth", authRoutes);
 app.use("/api/m", messageRoutes);
