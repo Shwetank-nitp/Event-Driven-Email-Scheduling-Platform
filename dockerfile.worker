@@ -9,4 +9,5 @@ RUN npx prisma generate
 
 COPY . .
 RUN mkdir -p logs
+RUN npm run build
 CMD ["npm", "run", "worker"]
