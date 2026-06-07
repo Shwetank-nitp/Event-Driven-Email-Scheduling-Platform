@@ -19,5 +19,9 @@ fi
 
 envsubst < ./monitoring/alertmanager.template.yml > ./monitoring/alertmanager.yml
 
-docker compose down -v
-docker compose up -d
+if [ "$1" == "--hard-start" ]; then
+    docker compose down -v
+else
+    docker compose down
+fi
+docker compose up -d --build
