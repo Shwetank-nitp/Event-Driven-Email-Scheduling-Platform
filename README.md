@@ -25,6 +25,12 @@ _(An architecture diagram outlining these components.)_
   <img src="architecture.png" alt="System Architecture Diagram" width="800">
 </p>
 
+_(An entity relationship diagram to help understand the database design.)_
+
+<p align="center">
+  <img src="ER_diagram.png" alt="System Entity Relationship Diagram" width="800">
+</p>
+
 ## Features
 
 - **User Authentication**: Secure user registration and login using JWT.
