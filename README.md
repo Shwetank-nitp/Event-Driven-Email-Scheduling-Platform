@@ -1,7 +1,5 @@
 # Event-Driven Email Scheduling Platform
 
-[![Ask DeepWiki](https://devin.ai/assets/askdeepwiki.png)](https://deepwiki.com/Shwetank-nitp/Event-Driven-Email-Scheduling-Platform)
-
 This repository contains a robust, event-driven platform for scheduling, dispatching, and managing email-like messages. The system is built with a microservices-oriented approach, containerized with Docker, and features a comprehensive observability stack with Prometheus, Grafana, and Alertmanager.
 
 ## System Architecture
