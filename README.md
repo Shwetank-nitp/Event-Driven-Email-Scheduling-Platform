@@ -19,21 +19,6 @@ The platform is composed of several interconnected services orchestrated by Dock
   - **Grafana (`grafana`)**: Provides a pre-configured dashboard for visualizing key performance indicators like message throughput, job processing duration, API latency, and worker health.
   - **Alertmanager (`alertmanager`)**: Manages alerts defined in Prometheus (e.g., high API latency, worker down). It is configured to send notifications via email.
 
-## System Architecture
-
-The platform is composed of several interconnected services orchestrated by Docker Compose:
-
-- **API Server (`api`)**: An Express.js application that serves the public-facing API. It handles user registration, authentication (JWT), and endpoints for scheduling new jobs, viewing messages, and managing jobs.
-- **Scheduler Worker (`schedulerWorker.ts`)**: A `node-cron` based background job that runs every 30 seconds. It queries the PostgreSQL database for due jobs, marks them as `QUEUED`, and publishes them to a RabbitMQ message queue. It also includes a recovery mechanism for tasks that get stuck in a `PROCESSING` state.
-- **Message Dispatch Worker (`worker`)**: A dedicated worker process that consumes jobs from the RabbitMQ `MESSAGE.send` queue. It processes each job by calling a mock email service, handles a retry-and-backoff strategy for transient failures, and sends terminally failed jobs to a Dead-Letter Queue (DLQ).
-- **PostgreSQL (`postgres`)**: The primary relational database, managed by Prisma ORM. It stores user data, message jobs, and messages (inbox/sent).
-- **Redis (`redis`)**: An in-memory data store used for API response caching (e.g., paginated lists, stats) and for distributed locking to prevent race conditions in the workers.
-- **RabbitMQ (`rabbitmq`)**: The message broker that decouples the API from the dispatch worker. It uses a direct exchange and multiple queues (`MESSAGE.send`, `MESSAGE.retry`, `MESSAGE.dlq`) to manage the lifecycle of a message job.
-- **Observability Stack**:
-  - **Prometheus (`prometheus`)**: Scrapes and stores time-series metrics from both the API server and the message dispatch worker.
-  - **Grafana (`grafana`)**: Provides a pre-configured dashboard for visualizing key performance indicators like message throughput, job processing duration, API latency, and worker health.
-  - **Alertmanager (`alertmanager`)**: Manages alerts defined in Prometheus (e.g., high API latency, worker down). It is configured to send notifications via email.
-
 _(An architecture diagram outlining these components.)_
 
 <p align="center">
